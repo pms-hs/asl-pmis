@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   LayoutDashboard, Network, Calendar, ShoppingCart, Package,
   HardHat, ClipboardList, Shield, FileText, AlertTriangle,
   Users, Truck, DollarSign, FolderOpen, TrendingUp,
-  Menu, X, Bell, Search, ChevronDown, Building2,
+  Menu, X, Bell, Search, Building2,
   BarChart3, CheckCircle2, Clock, AlertCircle, ArrowUpRight,
   ArrowDownRight, Activity, Wrench, ThermometerSun
 } from 'lucide-react';
@@ -12,17 +12,12 @@ import {
   riskRegister, dailyReports, equipmentList, progressData, costData,
   warehouseData, hseData, qaqcData, documents, contractData, manpowerData
 } from './data/pkplData';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
-  AreaChart, Area, RadialBarChart, RadialBar
-} from 'recharts';
 
 type Module = 'dashboard' | 'wbs' | 'planning' | 'procurement' | 'materials' |
   'construction' | 'dpr' | 'qaqc' | 'hse' | 'documents' | 'contracts' |
   'finance' | 'equipment' | 'manpower' | 'risks' | 'portfolio';
 
-const menuItems: { id: Module; label: string; icon: any; group: string }[] = [
+const menuItems: { id: Module; label: string; icon: React.ComponentType<any>; group: string }[] = [
   { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, group: 'Main' },
   { id: 'portfolio', label: 'Project Portfolio', icon: FolderOpen, group: 'Main' },
   { id: 'wbs', label: 'WBS Management', icon: Network, group: 'Project Controls' },
@@ -52,10 +47,9 @@ export default function App() {
     <div className="flex h-screen overflow-hidden bg-slate-100">
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-0 lg:w-16'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} fixed lg:relative z-50 h-full bg-sidebar transition-all duration-300 flex flex-col`}>
-        {/* Logo */}
         <div className="p-4 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
               <Building2 className="w-5 h-5 text-white" />
             </div>
             {sidebarOpen && (
@@ -67,7 +61,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
           {groups.map(group => (
             <div key={group} className="mb-4">
@@ -92,7 +85,6 @@ export default function App() {
           ))}
         </nav>
 
-        {/* User */}
         {sidebarOpen && (
           <div className="p-3 border-t border-slate-700/50">
             <div className="flex items-center gap-3 px-2">
@@ -110,7 +102,6 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block p-1.5 rounded-lg hover:bg-slate-100">
@@ -142,7 +133,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="animate-fade-in">
             {activeModule === 'dashboard' && <DashboardModule />}
@@ -165,11 +155,238 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
       )}
     </div>
+  );
+}
+
+// ============ CUSTOM CHART COMPONENTS ============
+
+function AreaChartSVG({ data, width = 600, height = 250 }: { data: { month: string; planned: number | null; actual: number | null }[]; width?: number; height?: number }) {
+  const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxVal = 60;
+
+  const plannedPoints = data.map((d, i) => {
+    const x = padding.left + (i / (data.length - 1)) * chartW;
+    const y = padding.top + chartH - ((d.planned || 0) / maxVal) * chartH;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const actualPoints = data.filter(d => d.actual !== null).map((d, i) => {
+    const x = padding.left + (i / (data.length - 1)) * chartW;
+    const y = padding.top + chartH - ((d.actual || 0) / maxVal) * chartH;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const plannedArea = `${padding.left},${padding.top + chartH} ${plannedPoints} ${padding.left + ((data.length - 1) / (data.length - 1)) * chartW},${padding.top + chartH}`;
+  const actualData = data.filter(d => d.actual !== null);
+  const actualArea = actualData.length > 0
+    ? `${padding.left},${padding.top + chartH} ${actualPoints} ${padding.left + ((actualData.length - 1) / (data.length - 1)) * chartW},${padding.top + chartH}`
+    : '';
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+      {/* Grid lines */}
+      {[0, 15, 30, 45, 60].map(v => {
+        const y = padding.top + chartH - (v / maxVal) * chartH;
+        return (
+          <g key={v}>
+            <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+            <text x={padding.left - 5} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8">{v}%</text>
+          </g>
+        );
+      })}
+      {/* X-axis labels */}
+      {data.map((d, i) => {
+        const x = padding.left + (i / (data.length - 1)) * chartW;
+        return <text key={i} x={x} y={height - 8} textAnchor="middle" fontSize="9" fill="#94a3b8">{d.month}</text>;
+      })}
+      {/* Planned area */}
+      <polygon points={plannedArea} fill="#3b82f620" />
+      <polyline points={plannedPoints} fill="none" stroke="#3b82f6" strokeWidth="2" />
+      {/* Actual area */}
+      {actualArea && <polygon points={actualArea} fill="#10b98120" />}
+      {actualPoints && <polyline points={actualPoints} fill="none" stroke="#10b981" strokeWidth="2" />}
+      {/* Legend */}
+      <rect x={width - 140} y={5} width="10" height="10" fill="#3b82f6" rx="2" />
+      <text x={width - 125} y={14} fontSize="9" fill="#64748b">Planned</text>
+      <rect x={width - 80} y={5} width="10" height="10" fill="#10b981" rx="2" />
+      <text x={width - 65} y={14} fontSize="9" fill="#64748b">Actual</text>
+    </svg>
+  );
+}
+
+function PieChartSVG({ data, size = 180 }: { data: { name: string; value: number; color: string }[]; size?: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.35;
+  const innerR = size * 0.22;
+  let currentAngle = -90;
+
+  const slices = data.map(d => {
+    const angle = (d.value / total) * 360;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    currentAngle = endAngle;
+
+    const startRad = (startAngle * Math.PI) / 180;
+    const endRad = (endAngle * Math.PI) / 180;
+
+    const x1 = cx + r * Math.cos(startRad);
+    const y1 = cy + r * Math.sin(startRad);
+    const x2 = cx + r * Math.cos(endRad);
+    const y2 = cy + r * Math.sin(endRad);
+    const ix1 = cx + innerR * Math.cos(startRad);
+    const iy1 = cy + innerR * Math.sin(startRad);
+    const ix2 = cx + innerR * Math.cos(endRad);
+    const iy2 = cy + innerR * Math.sin(endRad);
+
+    const largeArc = angle > 180 ? 1 : 0;
+
+    const path = `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 ${largeArc} 0 ${ix1} ${iy1} Z`;
+
+    return { path, color: d.color, name: d.name, value: d.value };
+  });
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto max-w-[180px] mx-auto">
+      {slices.map((s, i) => (
+        <path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth="2" />
+      ))}
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#1e293b">100%</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="#64748b">Total Weight</text>
+    </svg>
+  );
+}
+
+function BarChartSVG({ data, width = 600, height = 280 }: { data: { category: string; budget: number; committed: number; actual: number }[]; width?: number; height?: number }) {
+  const padding = { top: 20, right: 20, bottom: 60, left: 50 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxVal = Math.max(...data.map(d => d.budget)) * 1.1;
+  const barGroupWidth = chartW / data.length;
+  const barWidth = barGroupWidth * 0.22;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+      {/* Grid */}
+      {[0, 0.25, 0.5, 0.75, 1].map(frac => {
+        const y = padding.top + chartH * (1 - frac);
+        const val = maxVal * frac;
+        return (
+          <g key={frac}>
+            <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+            <text x={padding.left - 5} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8">${(val / 1000).toFixed(0)}K</text>
+          </g>
+        );
+      })}
+      {/* Bars */}
+      {data.map((d, i) => {
+        const groupX = padding.left + i * barGroupWidth + barGroupWidth * 0.15;
+        const budgetH = (d.budget / maxVal) * chartH;
+        const committedH = (d.committed / maxVal) * chartH;
+        const actualH = (d.actual / maxVal) * chartH;
+        return (
+          <g key={i}>
+            <rect x={groupX} y={padding.top + chartH - budgetH} width={barWidth} height={budgetH} fill="#94a3b8" rx="2" />
+            <rect x={groupX + barWidth + 2} y={padding.top + chartH - committedH} width={barWidth} height={committedH} fill="#3b82f6" rx="2" />
+            <rect x={groupX + (barWidth + 2) * 2} y={padding.top + chartH - actualH} width={barWidth} height={actualH} fill="#10b981" rx="2" />
+            <text x={groupX + barWidth * 1.5} y={height - padding.bottom + 12} textAnchor="middle" fontSize="7" fill="#64748b" transform={`rotate(-30, ${groupX + barWidth * 1.5}, ${height - padding.bottom + 12})`}>{d.category}</text>
+          </g>
+        );
+      })}
+      {/* Legend */}
+      <rect x={padding.left} y={height - 15} width="8" height="8" fill="#94a3b8" rx="1" />
+      <text x={padding.left + 12} y={height - 8} fontSize="8" fill="#64748b">Budget</text>
+      <rect x={padding.left + 60} y={height - 15} width="8" height="8" fill="#3b82f6" rx="1" />
+      <text x={padding.left + 72} y={height - 8} fontSize="8" fill="#64748b">Committed</text>
+      <rect x={padding.left + 140} y={height - 15} width="8" height="8" fill="#10b981" rx="1" />
+      <text x={padding.left + 152} y={height - 8} fontSize="8" fill="#64748b">Actual</text>
+    </svg>
+  );
+}
+
+function HorizontalBarChart({ data, width = 500, height = 250 }: { data: { category: string; count: number; present: number }[]; width?: number; height?: number }) {
+  const padding = { top: 10, right: 20, bottom: 30, left: 80 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxVal = Math.max(...data.map(d => d.count));
+  const barHeight = chartH / data.length * 0.7;
+  const gap = chartH / data.length * 0.3;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+      {data.map((d, i) => {
+        const y = padding.top + i * (barHeight + gap);
+        const totalW = (d.count / maxVal) * chartW;
+        const presentW = (d.present / maxVal) * chartW;
+        return (
+          <g key={i}>
+            <text x={padding.left - 5} y={y + barHeight / 2 + 3} textAnchor="end" fontSize="9" fill="#64748b">{d.category}</text>
+            <rect x={padding.left} y={y} width={totalW} height={barHeight} fill="#e2e8f0" rx="3" />
+            <rect x={padding.left} y={y} width={presentW} height={barHeight} fill="#3b82f6" rx="3" />
+            <text x={padding.left + totalW + 5} y={y + barHeight / 2 + 3} fontSize="8" fill="#64748b">{d.count}</text>
+          </g>
+        );
+      })}
+      {/* X-axis */}
+      {[0, 0.25, 0.5, 0.75, 1].map(frac => {
+        const x = padding.left + chartW * frac;
+        return (
+          <g key={frac}>
+            <line x1={x} y1={padding.top} x2={x} y2={padding.top + chartH} stroke="#f1f5f9" strokeWidth="1" />
+            <text x={x} y={height - 10} textAnchor="middle" fontSize="8" fill="#94a3b8">{Math.round(maxVal * frac)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function DonutChart({ accepted, rejected, size = 180 }: { accepted: number; rejected: number; size?: number }) {
+  const total = accepted + rejected;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.35;
+  const innerR = size * 0.24;
+
+  const acceptedAngle = (accepted / total) * 360;
+  const acceptedRad = (acceptedAngle * Math.PI) / 180;
+  const startRad = (-90 * Math.PI) / 180;
+
+  const ax1 = cx + r * Math.cos(startRad);
+  const ay1 = cy + r * Math.sin(startRad);
+  const ax2 = cx + r * Math.cos(startRad + acceptedRad);
+  const ay2 = cy + r * Math.sin(startRad + acceptedRad);
+  const aix1 = cx + innerR * Math.cos(startRad);
+  const aiy1 = cy + innerR * Math.sin(startRad);
+  const aix2 = cx + innerR * Math.cos(startRad + acceptedRad);
+  const aiy2 = cy + innerR * Math.sin(startRad + acceptedRad);
+  const largeArcA = acceptedAngle > 180 ? 1 : 0;
+
+  const rejectedAngle = 360 - acceptedAngle;
+  const rx1 = ax2;
+  const ry1 = ay2;
+  const rx2 = ax1;
+  const ry2 = ay1;
+  const rix1 = aix2;
+  const riy1 = aiy2;
+  const rix2 = aix1;
+  const riy2 = aiy1;
+  const largeArcR = rejectedAngle > 180 ? 1 : 0;
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto max-w-[180px] mx-auto">
+      <path d={`M ${ax1} ${ay1} A ${r} ${r} 0 ${largeArcA} 1 ${ax2} ${ay2} L ${aix2} ${aiy2} A ${innerR} ${innerR} 0 ${largeArcA} 0 ${aix1} ${aiy1} Z`} fill="#10b981" />
+      <path d={`M ${rx1} ${ry1} A ${r} ${r} 0 ${largeArcR} 1 ${rx2} ${ry2} L ${rix2} ${riy2} A ${innerR} ${innerR} 0 ${largeArcR} 0 ${rix1} ${riy1} Z`} fill="#ef4444" />
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="12" fontWeight="bold" fill="#1e293b">{((accepted / total) * 100).toFixed(1)}%</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="#64748b">Acceptance</text>
+    </svg>
   );
 }
 
@@ -181,10 +398,6 @@ function DashboardModule() {
     { name: 'Construction', value: 40, color: '#f59e0b' },
     { name: 'Testing', value: 10, color: '#8b5cf6' },
     { name: 'PM', value: 5, color: '#6b7280' },
-  ];
-
-  const spiData = [
-    { name: 'SPI', value: projectInfo.spi * 100, fill: projectInfo.spi >= 1 ? '#10b981' : '#ef4444' }
   ];
 
   return (
@@ -229,37 +442,18 @@ function DashboardModule() {
             <h3 className="text-sm font-semibold text-slate-800">Progress S-Curve</h3>
             <span className="text-xs text-slate-500">Planned vs Actual</span>
           </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={progressData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} unit="%" />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Area type="monotone" dataKey="planned" stroke="#3b82f6" fill="#3b82f620" strokeWidth={2} name="Planned" />
-              <Area type="monotone" dataKey="actual" stroke="#10b981" fill="#10b98120" strokeWidth={2} name="Actual" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <AreaChartSVG data={progressData} />
         </div>
 
         {/* WBS Weight Distribution */}
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-800 mb-4">WBS Weight Distribution</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                {pieData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1 mt-2">
+          <PieChartSVG data={pieData} />
+          <div className="space-y-1.5 mt-3">
             {pieData.map((item, i) => (
               <div key={i} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }}></div>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></div>
                   <span className="text-slate-600">{item.name}</span>
                 </div>
                 <span className="font-medium text-slate-800">{item.value}%</span>
@@ -346,7 +540,6 @@ function WBSModule() {
         </div>
       </div>
 
-      {/* WBS Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-xs text-slate-500 mb-1">Total WBS Weight</p>
@@ -362,7 +555,6 @@ function WBSModule() {
         </div>
       </div>
 
-      {/* WBS Tree */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50">
           <h3 className="text-sm font-semibold text-slate-700">WBS Hierarchy & Progress</h3>
@@ -428,7 +620,6 @@ function PlanningModule() {
         </div>
       </div>
 
-      {/* Schedule Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
           <p className="text-xl font-bold text-slate-800">{activities.length}</p>
@@ -452,7 +643,6 @@ function PlanningModule() {
         </div>
       </div>
 
-      {/* Activities Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -510,7 +700,6 @@ function ProcurementModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ New MR</button>
       </div>
 
-      {/* Workflow Steps */}
       <div className="bg-white rounded-xl p-4 border border-slate-200">
         <div className="flex items-center justify-between overflow-x-auto pb-2">
           {['MR', 'RFQ', 'Evaluation', 'PO', 'Delivery', 'GRN', 'Warehouse', 'Issue'].map((step, i) => (
@@ -527,7 +716,6 @@ function ProcurementModule() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-xs text-slate-500">Total PO Value</p>
@@ -547,7 +735,6 @@ function ProcurementModule() {
         </div>
       </div>
 
-      {/* PO Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Purchase Orders</h3>
@@ -599,7 +786,6 @@ function MaterialsModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ Add Material</button>
       </div>
 
-      {/* Warehouse Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {warehouseData.map(wh => (
           <div key={wh.warehouse} className="bg-white rounded-xl p-4 border border-slate-200 card-hover">
@@ -613,7 +799,6 @@ function MaterialsModule() {
         ))}
       </div>
 
-      {/* Material Register */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Material Register</h3>
@@ -683,7 +868,6 @@ function ConstructionModule() {
         <p className="text-sm text-slate-500">Physical Progress Measurement by Activity</p>
       </div>
 
-      {/* Progress Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {constructionActivities.map((act, i) => (
           <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 card-hover">
@@ -731,7 +915,6 @@ function DPRModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ New DPR</button>
       </div>
 
-      {/* Today's Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
           <Users className="w-5 h-5 text-blue-600 mx-auto mb-1" />
@@ -749,7 +932,7 @@ function DPRModule() {
           <p className="text-[10px] text-slate-500">Weather</p>
         </div>
         <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-          <Camera className="w-5 h-5 text-purple-600 mx-auto mb-1" />
+          <FileText className="w-5 h-5 text-purple-600 mx-auto mb-1" />
           <p className="text-lg font-bold text-slate-800">{dailyReports[0].photos}</p>
           <p className="text-[10px] text-slate-500">Photos</p>
         </div>
@@ -760,7 +943,6 @@ function DPRModule() {
         </div>
       </div>
 
-      {/* DPR List */}
       <div className="space-y-3">
         {dailyReports.map((dpr, i) => (
           <div key={i} className="bg-white rounded-xl p-4 border border-slate-200 card-hover">
@@ -795,11 +977,6 @@ function DPRModule() {
 
 // ============ QA/QC MODULE ============
 function QAQCModule() {
-  const weldData = [
-    { name: 'Accepted', value: qaqcData.weldAccepted, color: '#10b981' },
-    { name: 'Rejected', value: qaqcData.weldRejected, color: '#ef4444' },
-  ];
-
   return (
     <div className="space-y-6">
       <div>
@@ -807,7 +984,6 @@ function QAQCModule() {
         <p className="text-sm text-slate-500">Quality Assurance & Quality Control</p>
       </div>
 
-      {/* QC Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-xs text-slate-500">Total Inspections</p>
@@ -831,20 +1007,20 @@ function QAQCModule() {
         </div>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Weld Acceptance</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={weldData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                {weldData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <DonutChart accepted={qaqcData.weldAccepted} rejected={qaqcData.weldRejected} />
+          <div className="flex justify-center gap-4 mt-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+              <span className="text-[10px] text-slate-600">Accepted: {qaqcData.weldAccepted.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+              <span className="text-[10px] text-slate-600">Rejected: {qaqcData.weldRejected.toLocaleString()}</span>
+            </div>
+          </div>
         </div>
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Inspection Summary</h3>
@@ -859,7 +1035,7 @@ function QAQCModule() {
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-slate-600">NDT Completed</span>
-                <span className="font-medium">{qaqcData.ndtCompleted}/{qaqcData.weldJoints}</span>
+                <span className="font-medium">{qaqcData.ndtCompleted.toLocaleString()}/{qaqcData.weldJoints.toLocaleString()}</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(qaqcData.ndtCompleted / qaqcData.weldJoints) * 100}%` }}></div></div>
             </div>
@@ -874,22 +1050,21 @@ function QAQCModule() {
         </div>
       </div>
 
-      {/* IR/MIR/RFI Tracking */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Inspection Requests</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 p-4">
           {[
-            { label: 'IR', count: 156, open: 5, color: 'blue' },
-            { label: 'MIR', count: 42, open: 2, color: 'green' },
-            { label: 'RFI', count: 28, open: 1, color: 'purple' },
-            { label: 'NCR', count: 8, open: 3, color: 'red' },
-            { label: 'CAR', count: 12, open: 5, color: 'amber' },
-            { label: 'Punch List', count: 48, open: 12, color: 'indigo' },
+            { label: 'IR', count: 156, open: 5, bg: 'bg-blue-50', text: 'text-blue-700' },
+            { label: 'MIR', count: 42, open: 2, bg: 'bg-green-50', text: 'text-green-700' },
+            { label: 'RFI', count: 28, open: 1, bg: 'bg-purple-50', text: 'text-purple-700' },
+            { label: 'NCR', count: 8, open: 3, bg: 'bg-red-50', text: 'text-red-700' },
+            { label: 'CAR', count: 12, open: 5, bg: 'bg-amber-50', text: 'text-amber-700' },
+            { label: 'Punch List', count: 48, open: 12, bg: 'bg-indigo-50', text: 'text-indigo-700' },
           ].map(item => (
-            <div key={item.label} className={`bg-${item.color}-50 rounded-lg p-3 text-center`}>
-              <p className="text-xs font-bold text-slate-600">{item.label}</p>
+            <div key={item.label} className={`${item.bg} rounded-lg p-3 text-center`}>
+              <p className={`text-xs font-bold ${item.text}`}>{item.label}</p>
               <p className="text-xl font-bold text-slate-800">{item.count}</p>
               <p className="text-[10px] text-red-500">{item.open} Open</p>
             </div>
@@ -909,7 +1084,6 @@ function HSEModule() {
         <p className="text-sm text-slate-500">Health, Safety & Environment</p>
       </div>
 
-      {/* HSE KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-4 text-white">
           <Shield className="w-6 h-6 mb-2 opacity-80" />
@@ -938,7 +1112,6 @@ function HSEModule() {
         </div>
       </div>
 
-      {/* HSE Details */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Safety Activities</h3>
@@ -963,41 +1136,21 @@ function HSEModule() {
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">HSE Compliance Status</h3>
           <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600">PPE Compliance</span>
-                <span className="font-medium text-green-600">98%</span>
+            {[
+              { label: 'PPE Compliance', value: 98, color: 'bg-green-500', textColor: 'text-green-600' },
+              { label: 'Toolbox Talk Completion', value: 92, color: 'bg-blue-500', textColor: 'text-blue-600' },
+              { label: 'Permit Compliance', value: 100, color: 'bg-green-500', textColor: 'text-green-600' },
+              { label: 'Training Completion', value: 85, color: 'bg-amber-500', textColor: 'text-amber-600' },
+              { label: 'Incident Closure Rate', value: 100, color: 'bg-green-500', textColor: 'text-green-600' },
+            ].map((item, i) => (
+              <div key={i}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-600">{item.label}</span>
+                  <span className={`font-medium ${item.textColor}`}>{item.value}%</span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full"><div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.value}%` }}></div></div>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{ width: '98%' }}></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600">Toolbox Talk Completion</span>
-                <span className="font-medium text-blue-600">92%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-blue-500 rounded-full" style={{ width: '92%' }}></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600">Permit Compliance</span>
-                <span className="font-medium text-green-600">100%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{ width: '100%' }}></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600">Training Completion</span>
-                <span className="font-medium text-amber-600">85%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-amber-500 rounded-full" style={{ width: '85%' }}></div></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600">Incident Closure Rate</span>
-                <span className="font-medium text-green-600">100%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full"><div className="h-full bg-green-500 rounded-full" style={{ width: '100%' }}></div></div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1017,7 +1170,6 @@ function DocumentsModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ Upload Document</button>
       </div>
 
-      {/* Document Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200 text-center">
           <p className="text-2xl font-bold text-slate-800">{documents.length}</p>
@@ -1037,7 +1189,6 @@ function DocumentsModule() {
         </div>
       </div>
 
-      {/* Documents Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -1081,7 +1232,6 @@ function ContractsModule() {
         <p className="text-sm text-slate-500">Client Contract Tracking & Variations</p>
       </div>
 
-      {/* Contract Summary */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
@@ -1103,7 +1253,6 @@ function ContractsModule() {
         </div>
       </div>
 
-      {/* Financial Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-xs text-slate-500">Advance Given</p>
@@ -1127,7 +1276,6 @@ function ContractsModule() {
         </div>
       </div>
 
-      {/* Variations Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Variation Orders</h3>
@@ -1168,7 +1316,6 @@ function FinanceModule() {
         <p className="text-sm text-slate-500">Budget vs Commitment vs Actual Cost Analysis</p>
       </div>
 
-      {/* Cost Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-xs text-slate-500">Total Budget</p>
@@ -1190,24 +1337,11 @@ function FinanceModule() {
         </div>
       </div>
 
-      {/* Cost Chart */}
       <div className="bg-white rounded-xl p-5 border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Cost by Category</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={costData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}K`} />
-            <YAxis type="category" dataKey="category" tick={{ fontSize: 10 }} width={100} />
-            <Tooltip formatter={(value: number) => `$${(value/1000).toFixed(0)}K`} />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Bar dataKey="budget" fill="#94a3b8" name="Budget" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="committed" fill="#3b82f6" name="Committed" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="actual" fill="#10b981" name="Actual" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChartSVG data={costData} />
       </div>
 
-      {/* Cost Centers */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Cost Center Breakdown</h3>
@@ -1254,15 +1388,6 @@ function FinanceModule() {
 
 // ============ RISKS MODULE ============
 function RisksModule() {
-  const riskMatrix = [
-    { probability: 'High', impact: 'High', risks: riskRegister.filter(r => r.probability === 'High' && r.impact === 'High') },
-    { probability: 'High', impact: 'Medium', risks: riskRegister.filter(r => r.probability === 'High' && r.impact === 'Medium') },
-    { probability: 'Medium', impact: 'High', risks: riskRegister.filter(r => r.probability === 'Medium' && (r.impact === 'High' || r.impact === 'Critical')) },
-    { probability: 'Medium', impact: 'Medium', risks: riskRegister.filter(r => r.probability === 'Medium' && r.impact === 'Medium') },
-    { probability: 'Low', impact: 'High', risks: riskRegister.filter(r => r.probability === 'Low' && r.impact === 'High') },
-    { probability: 'Low', impact: 'Medium', risks: riskRegister.filter(r => r.probability === 'Low' && r.impact === 'Medium') },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1273,7 +1398,6 @@ function RisksModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ Add Risk</button>
       </div>
 
-      {/* Risk Matrix */}
       <div className="bg-white rounded-xl p-5 border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Risk Matrix (Probability × Impact)</h3>
         <div className="grid grid-cols-3 gap-2">
@@ -1283,31 +1407,30 @@ function RisksModule() {
           
           <div className="text-xs font-medium text-slate-500 flex items-center">High Prob.</div>
           <div className="bg-amber-100 border border-amber-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[1].risks.map(r => <p key={r.id} className="text-[10px] text-amber-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'High' && r.impact === 'Medium').map(r => <p key={r.id} className="text-[10px] text-amber-800 truncate">{r.risk}</p>)}
           </div>
           <div className="bg-red-100 border border-red-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[0].risks.map(r => <p key={r.id} className="text-[10px] text-red-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'High' && (r.impact === 'High' || r.impact === 'Critical')).map(r => <p key={r.id} className="text-[10px] text-red-800 truncate">{r.risk}</p>)}
           </div>
           
           <div className="text-xs font-medium text-slate-500 flex items-center">Medium Prob.</div>
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[3].risks.map(r => <p key={r.id} className="text-[10px] text-yellow-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'Medium' && r.impact === 'Medium').map(r => <p key={r.id} className="text-[10px] text-yellow-800 truncate">{r.risk}</p>)}
           </div>
           <div className="bg-orange-100 border border-orange-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[2].risks.map(r => <p key={r.id} className="text-[10px] text-orange-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'Medium' && (r.impact === 'High' || r.impact === 'Critical')).map(r => <p key={r.id} className="text-[10px] text-orange-800 truncate">{r.risk}</p>)}
           </div>
           
           <div className="text-xs font-medium text-slate-500 flex items-center">Low Prob.</div>
           <div className="bg-green-50 border border-green-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[5].risks.map(r => <p key={r.id} className="text-[10px] text-green-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'Low' && r.impact === 'Medium').map(r => <p key={r.id} className="text-[10px] text-green-800 truncate">{r.risk}</p>)}
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 min-h-[60px]">
-            {riskMatrix[4].risks.map(r => <p key={r.id} className="text-[10px] text-amber-800 truncate">{r.risk}</p>)}
+            {riskRegister.filter(r => r.probability === 'Low' && r.impact === 'High').map(r => <p key={r.id} className="text-[10px] text-amber-800 truncate">{r.risk}</p>)}
           </div>
         </div>
       </div>
 
-      {/* Risk Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -1356,7 +1479,6 @@ function EquipmentModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ Add Equipment</button>
       </div>
 
-      {/* Equipment Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200 text-center">
           <p className="text-2xl font-bold text-green-600">{equipmentList.filter(e => e.status === 'Operating').length}</p>
@@ -1376,7 +1498,6 @@ function EquipmentModule() {
         </div>
       </div>
 
-      {/* Equipment Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {equipmentList.map(eq => (
           <div key={eq.id} className="bg-white rounded-xl p-4 border border-slate-200 card-hover">
@@ -1425,7 +1546,6 @@ function ManpowerModule() {
         <p className="text-sm text-slate-500">Workforce Planning & Attendance</p>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200 text-center">
           <p className="text-2xl font-bold text-slate-800">{totalManpower}</p>
@@ -1445,23 +1565,11 @@ function ManpowerModule() {
         </div>
       </div>
 
-      {/* Manpower Chart */}
       <div className="bg-white rounded-xl p-5 border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Manpower Distribution</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={manpowerData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="category" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Bar dataKey="count" fill="#3b82f6" name="Total" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="present" fill="#10b981" name="Present" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <HorizontalBarChart data={manpowerData} />
       </div>
 
-      {/* Manpower Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -1509,6 +1617,14 @@ function PortfolioModule() {
     { name: "Oil & Gas Refinery", client: "Eastern Refinery Ltd", value: "$5.5M", progress: 0, status: "Proposal", color: "green" },
   ];
 
+  const colorMap: Record<string, { bg: string; text: string; badge: string }> = {
+    blue: { bg: 'bg-blue-50', text: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
+    slate: { bg: 'bg-slate-50', text: 'text-slate-600', badge: 'bg-slate-100 text-slate-700' },
+    amber: { bg: 'bg-amber-50', text: 'text-amber-600', badge: 'bg-amber-100 text-amber-700' },
+    purple: { bg: 'bg-purple-50', text: 'text-purple-600', badge: 'bg-purple-100 text-purple-700' },
+    green: { bg: 'bg-green-50', text: 'text-green-600', badge: 'bg-green-100 text-green-700' },
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1519,7 +1635,6 @@ function PortfolioModule() {
         <button className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg">+ New Project</button>
       </div>
 
-      {/* Portfolio Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200 text-center">
           <p className="text-2xl font-bold text-slate-800">{projects.length}</p>
@@ -1539,31 +1654,33 @@ function PortfolioModule() {
         </div>
       </div>
 
-      {/* Project Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((proj, i) => (
-          <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 card-hover">
-            <div className="flex items-center justify-between mb-3">
-              <div className={`w-10 h-10 rounded-lg bg-${proj.color}-50 flex items-center justify-center`}>
-                <Building2 className={`w-5 h-5 text-${proj.color}-600`} />
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full bg-${proj.color}-100 text-${proj.color}-700 font-medium`}>{proj.status}</span>
-            </div>
-            <h4 className="text-sm font-semibold text-slate-800 mb-1">{proj.name}</h4>
-            <p className="text-xs text-slate-500 mb-3">{proj.client}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-600">{proj.value}</span>
-              {proj.progress > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${proj.progress}%` }}></div>
-                  </div>
-                  <span className="text-[10px] font-medium">{proj.progress}%</span>
+        {projects.map((proj, i) => {
+          const c = colorMap[proj.color] || colorMap.blue;
+          return (
+            <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 card-hover">
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-10 h-10 rounded-lg ${c.bg} flex items-center justify-center`}>
+                  <Building2 className={`w-5 h-5 ${c.text}`} />
                 </div>
-              )}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${c.badge} font-medium`}>{proj.status}</span>
+              </div>
+              <h4 className="text-sm font-semibold text-slate-800 mb-1">{proj.name}</h4>
+              <p className="text-xs text-slate-500 mb-3">{proj.client}</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">{proj.value}</span>
+                {proj.progress > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${proj.progress}%` }}></div>
+                    </div>
+                    <span className="text-[10px] font-medium">{proj.progress}%</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1605,13 +1722,13 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function KPICard({ title, value, subtitle, trend, trendValue, color, icon: Icon }: {
-  title: string; value: string; subtitle: string; trend: string; trendValue: string; color: string; icon: any;
+  title: string; value: string; subtitle: string; trend: string; trendValue: string; color: string; icon: React.ComponentType<any>;
 }) {
-  const colorClasses: Record<string, { bg: string; text: string; icon: string }> = {
-    red: { bg: 'bg-red-50', text: 'text-red-600', icon: 'text-red-500' },
-    amber: { bg: 'bg-amber-50', text: 'text-amber-600', icon: 'text-amber-500' },
-    blue: { bg: 'bg-blue-50', text: 'text-blue-600', icon: 'text-blue-500' },
-    green: { bg: 'bg-green-50', text: 'text-green-600', icon: 'text-green-500' },
+  const colorClasses: Record<string, { text: string; icon: string }> = {
+    red: { text: 'text-red-600', icon: 'text-red-500' },
+    amber: { text: 'text-amber-600', icon: 'text-amber-500' },
+    blue: { text: 'text-blue-600', icon: 'text-blue-500' },
+    green: { text: 'text-green-600', icon: 'text-green-500' },
   };
 
   const c = colorClasses[color] || colorClasses.blue;
@@ -1629,14 +1746,5 @@ function KPICard({ title, value, subtitle, trend, trendValue, color, icon: Icon 
       <p className="text-[10px] text-slate-500 mt-0.5">{subtitle}</p>
       <p className="text-[10px] text-slate-400">{title}</p>
     </div>
-  );
-}
-
-function Camera(props: any) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-      <circle cx="12" cy="13" r="3"/>
-    </svg>
   );
 }
